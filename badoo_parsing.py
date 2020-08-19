@@ -26,6 +26,7 @@ vk_domain = r"https://vk.com/"
 vk_url = vk_domain + r"im?sel=-91050183"
 vk_like_xpath = r'/html/body/div[11]/div/div/div[2]/div[2]/div[2]/div/div/div/div/div[1]/div[3]/div[2]/div[4]/div[2]/div[4]/div[2]/div[3]/div/div/div[1]/div[1]/div/div[1]/div/div/div[1]/button'
 vk_disike_xpath = r'/html/body/div[11]/div/div/div[2]/div[2]/div[2]/div/div/div/div/div[1]/div[3]/div[2]/div[4]/div[2]/div[4]/div[2]/div[3]/div/div/div[1]/div[1]/div/div[1]/div/div/div[3]/button'
+vk_message_xpath = r'//*[@id="content"]/div/div[1]/div[3]/div[2]/div[3]/div/div/div[2]/div/div[1]/div[last()]'
 vk_pop_up_xpath = r''
 
 options = webdriver.ChromeOptions()
@@ -51,6 +52,8 @@ def swipe_badoo_user(i):
 
 
 def swipe_vk_user(i):
+    if 'Есть взаимная симпатия!' in driver.find_element_by_xpath(vk_message_xpath).text:
+        print(driver.find_element_by_xpath(vk_message_xpath).get_attribute("href"))
     if i % (randint(3, 6)) != 0:  # Click like for every 3-6 user
         WebDriverWait(driver, 1).until(EC.presence_of_element_located((By.XPATH, vk_like_xpath)))
         elem = driver.find_element_by_xpath(vk_like_xpath)
@@ -83,7 +86,7 @@ def write_badoo_message():
             user.click()
             WebDriverWait(user, 10).until(EC.presence_of_element_located((By.XPATH, '//*[@id="t"]')))
             message_area = user.find_element_by_xpath('//*[@id="t"]')
-            message_area.send_keys(f'Привет. Как дела? Хочешь познакомиться?')
+            message_area.send_keys(f'Привет. Хочешь потусить?')
             message_area.send_keys(Keys.ENTER)
             counter += 1
     print(f'Sent messages: {counter}')
