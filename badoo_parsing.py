@@ -4,7 +4,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from time import sleep
+from time import sleep as time_sleep
 from random import uniform as random_uniform
 from requests import get as requests_get
 from zipfile import ZipFile as zipfile_ZipFile
@@ -14,8 +14,9 @@ from json import loads as json_loads
 from json import dumps as json_dumps
 
 # # # config # # #
-badoo_domain = r"https://badoo.com/"
-badoo_url = badoo_domain + r"encounters"
+badoo_domain = r"https://badoo.com"
+badoo_matches_url = f'{badoo_domain}/encounters'
+badoo_messages_url = f'{badoo_domain}/messenger/open'
 badoo_messages_xpath = r'/html/body/div[2]/div[1]/aside/div/div/div/div[1]/div/div[3]/div/a[3]'
 
 vk_domain = r"https://vk.com/"
@@ -70,12 +71,11 @@ def get_chromedriver():
             return webdriver.Chrome(executable_path=path)
         except Exception:
             pass
-    else:
-        raise Exception('No "chromedriver.exe" is supplied')  # Error if no correct driver
 
 
 def swipe_badoo_user():
-    webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()  # Skip ads pop up if exists
+    # Send key to whole page instead of particular element (Skip ads pop up if exists). Why "perform" ?
+    webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()
     if random_uniform(0, 4) > 1:  # Random value for clicking like to every 4rd user
         webdriver.ActionChains(driver).send_keys(1).perform()  # 1 is like, 2 is dislike
     else:  # click dislike
@@ -101,62 +101,58 @@ def swipe_badoo_user():
 #             driver.find_element_by_xpath(vk_like_xpath).click()
 
 
-def write_badoo_message(text):
-    driver.get('https://badoo.com/messenger/open')
-    users_css_selector = r'.contacts__item.js-contacts-item'
-    user_last_message_xpath = './div/div[2]/span[1]'
-    WebDriverWait(driver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, users_css_selector)))
-    users = driver.find_elements_by_css_selector(users_css_selector)
-    counter = 0
-    for user in users[1:]:  # First is you
-        sleep(1)
-        WebDriverWait(user, 10).until(EC.presence_of_element_located((By.XPATH, user_last_message_xpath)))
-        if 'симпатия' in user.find_element_by_xpath(user_last_message_xpath).text:
-            print(f"curent user id: {user.get_property('id')}")
-            sleep(1)
-            user.click()
-            WebDriverWait(user, 10).until(EC.presence_of_element_located((By.XPATH, '//*[@id="t"]')))
-            message_area = user.find_element_by_xpath('//*[@id="t"]')
-            message_area.send_keys(text)
-            message_area.send_keys(Keys.ENTER)
-            counter += 1
-    print(f'Sent messages: {counter}')
+def badoo_send_message(text):
+    sent_messages_counter = 0
+    login(cookie_filename='cookies_badoo_(keep_this_file_save_!_).txt', url=badoo_messages_url)
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located(
+        locator=(By.CLASS_NAME, 'contacts__item.js-contacts-item')))  # Wait until "users" element will be loaded
+    users = driver.find_elements_by_class_name(name='contacts__item.js-contacts-item')
+    for user in users[9:20]:
+        try:
+            if 'cимпатия' in user.text:  # Sort by a default message after a match (no need to open a dialog)
+                user.click()  # Open a chat with a user
+                driver.find_element_by_id(id_='t').send_keys(text, Keys.ENTER,)
+                # Skip pop up AFTER sending a message after pressing an "ENTER" key)
+                webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()
+                sent_messages_counter += 1
+        except Exception as e:
+            pass
+    print(f'Sent messages: {sent_messages_counter}')
 
 
 def start_badoo_liker(count):
-    driver.get(badoo_url)
-    login('cookies_badoo_(keep_this_file_save_!_).txt')
-    for i in range(int(count)):
-        if i % 100 == 0:
-            print(i)
+    login('cookies_badoo_(keep_this_file_save_!_).txt', url=badoo_matches_url)
+    for i in tqdm(iterable=range(int(count)), desc='swipes done', unit='swipe'):  # tqdm for progress bar
         try:
             swipe_badoo_user()
-            sleep(random_uniform(1.0, 2.0))
+            time_sleep(random_uniform(1.0, 2.0))
         except Exception as e:
             print(e)
 
 
-def login(cookie_filename):
+def login(cookie_filename, url):
     while True:
         try:
-            try:
-                with open(cookie_filename, 'r') as cookie_file_obj:
-                    for cookie in json_loads(cookie_file_obj.read()):
-                        driver.add_cookie(cookie)
-                    driver.refresh()
-            except FileNotFoundError:
-                pass
+            driver.get(url)
+            with open(cookie_filename, 'r') as cookie_file_obj:  # First try to load cookie
+                for cookie in json_loads(cookie_file_obj.read()):
+                    driver.add_cookie(cookie)
+            driver.get(url)  # reload page with a new cookie (no refresh because of possible redirect by cookies)
+            # throw error if no "sign out" icon
             WebDriverWait(driver, 60).until(EC.presence_of_element_located((By.CLASS_NAME, 'sidebar-info__signout')))
-            try:
-                with open(cookie_filename, 'w') as cookie_file_obj:
-                    cookie_file_obj.write(json_dumps(driver.get_cookies()))
-            except FileNotFoundError:
-                pass
-            break
-        except TimeoutException:
-            print("it seems you are not logged in, for the program to work, you need to log in to the site.\n"
-                  "Waiting until you are logged in...")
-
+            with open(cookie_filename, 'w') as cookie_file_obj:  # save cookie after a correct login
+                cookie_file_obj.write(json_dumps(driver.get_cookies()))
+        except FileNotFoundError as e:
+            print('Can not to find "cookies_badoo_(keep_this_file_save_!_).txt" file'
+                  f'Error: {e}')
+            print('it seems you are not logged in, for the program to work, you need to log in to the site.\n'
+                  'Waiting until you are logged in...'
+                  f'Error: {e}')
+        except TimeoutException as e:
+            print('it seems you are not logged in, for the program to work, you need to log in to the site.\n'
+                  'Waiting until you are logged in...'
+                  f'Error: {e}')
+        return
 
 # def start_vk_liker(count):  # Not in use
 #     print(vk_url)
@@ -164,20 +160,22 @@ def login(cookie_filename):
 #     for i in range(int(count)):
 #         try:
 #             swipe_vk_user(i)
-#             sleep(randint(175, 325) / 100)
+#             time_sleep(randint(175, 325) / 100)
 #         except Exception as e:
 #             print(e)
 
 
 if __name__ == '__main__':
+    opt = input('Please select 1 for swipes, 2 for send messages to all new matches\n')
     try:
         driver = webdriver.Chrome(executable_path='chromedriver.exe')
     except WebDriverException:
         driver = get_chromedriver()
-    opt = input('Please select 1 for swipes, 2 for send messages to all new matches\n')
+    except Exception as e:
+        raise Exception('No "chromedriver.exe" is supplied, can not go on, quiting ...')  # Error if no correct driver
     if opt == '1':
         start_badoo_liker(input('PLease give me a count of swipes\n'))
     else:
-        write_badoo_message(input('PLease specify the text to send for'))
+        badoo_send_message(input('PLease specify the text to send for\n'))
     driver.quit()
     print('Done!')
