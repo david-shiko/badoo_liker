@@ -101,22 +101,45 @@ def swipe_badoo_user():
 #             driver.find_element_by_xpath(vk_like_xpath).click()
 
 
+def scroll_down_users_elem(users_parent_elem):
+    """
+    Logic of func:
+    To load all users you need to reach bottom of element with users. Possible way to do it:
+        1. Get location of first element.
+        2. Focus on this element.
+        3. Press page down button multiple times.
+    :return:
+    """
+    shift_elem_old_location = None
+    shift_elem = users_parent_elem.find_element_by_class_name(name='contacts__item.js-contacts-item')
+    shift_elem.click()
+    while shift_elem_old_location != shift_elem.location:
+        shift_elem_old_location = shift_elem.location
+        webdriver.ActionChains(driver).send_keys(Keys.PAGE_DOWN).perform()
+        time_sleep(1)  # Wait browser to update location
+    pass
+
+
 def badoo_send_message(text):
     sent_messages_counter = 0
     login(cookie_filename='cookies_badoo_(keep_this_file_save_!_).txt', url=badoo_messages_url)
-    WebDriverWait(driver, 10).until(EC.presence_of_element_located(
-        locator=(By.CLASS_NAME, 'contacts__item.js-contacts-item')))  # Wait until "users" element will be loaded
-    users = driver.find_elements_by_class_name(name='contacts__item.js-contacts-item')
-    for user in users[9:20]:
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located(locator=(By.CLASS_NAME, 'contacts__users')))
+    users_parent_elem = driver.find_element_by_class_name(name='contacts__users')  # To exclude itself from list
+    scroll_down_users_elem(users_parent_elem=users_parent_elem)
+    users = users_parent_elem.find_elements_by_class_name(name='contacts__item.js-contacts-item')
+    for user in users:
         try:
-            if 'cимпатия' in user.text:  # Sort by a default message after a match (no need to open a dialog)
+            # Sort by a default message after a match (no need to open a dialog)
+            if any(word in user.text for word in ('симпатия', 'хочет общаться')):
                 user.click()  # Open a chat with a user
-                driver.find_element_by_id(id_='t').send_keys(text, Keys.ENTER,)
+                time_sleep(1)  # No wait because of old element whit same id will be trigger (?)
+                driver.find_element_by_id(id_='t').send_keys(text, Keys.ENTER)
                 # Skip pop up AFTER sending a message after pressing an "ENTER" key)
+                time_sleep(1)
                 webdriver.ActionChains(driver).send_keys(Keys.ESCAPE).perform()
                 sent_messages_counter += 1
         except Exception as e:
-            pass
+            print(e)
     print(f'Sent messages: {sent_messages_counter}')
 
 
@@ -139,9 +162,10 @@ def login(cookie_filename, url):
                     driver.add_cookie(cookie)
             driver.get(url)  # reload page with a new cookie (no refresh because of possible redirect by cookies)
             # throw error if no "sign out" icon
-            WebDriverWait(driver, 60).until(EC.presence_of_element_located((By.CLASS_NAME, 'sidebar-info__signout')))
+            WebDriverWait(driver, 30).until(EC.presence_of_element_located((By.CLASS_NAME, 'sidebar-info__signout')))
             with open(cookie_filename, 'w') as cookie_file_obj:  # save cookie after a correct login
                 cookie_file_obj.write(json_dumps(driver.get_cookies()))
+            return
         except FileNotFoundError as e:
             print('Can not to find "cookies_badoo_(keep_this_file_save_!_).txt" file'
                   f'Error: {e}')
@@ -152,7 +176,7 @@ def login(cookie_filename, url):
             print('it seems you are not logged in, for the program to work, you need to log in to the site.\n'
                   'Waiting until you are logged in...'
                   f'Error: {e}')
-        return
+
 
 # def start_vk_liker(count):  # Not in use
 #     print(vk_url)
@@ -166,16 +190,17 @@ def login(cookie_filename, url):
 
 
 if __name__ == '__main__':
+    #input(os.getcwd())
+    qu_1 = 'PLease give me a count of swipes\n'
+    qu_2 = 'PLease specify the text to send for\n'
     opt = input('Please select 1 for swipes, 2 for send messages to all new matches\n')
+    func, arg = (start_badoo_liker, input(qu_1),) if opt == '1' else (badoo_send_message, input(qu_2),)
     try:
         driver = webdriver.Chrome(executable_path='chromedriver.exe')
     except WebDriverException:
         driver = get_chromedriver()
     except Exception as e:
         raise Exception('No "chromedriver.exe" is supplied, can not go on, quiting ...')  # Error if no correct driver
-    if opt == '1':
-        start_badoo_liker(input('PLease give me a count of swipes\n'))
-    else:
-        badoo_send_message(input('PLease specify the text to send for\n'))
+    func(arg)
     driver.quit()
     print('Done!')
